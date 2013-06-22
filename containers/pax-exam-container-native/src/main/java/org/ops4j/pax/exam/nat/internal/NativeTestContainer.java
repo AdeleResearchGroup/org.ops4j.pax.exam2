@@ -17,65 +17,38 @@
  */
 package org.ops4j.pax.exam.nat.internal;
 
-import static org.ops4j.pax.exam.Constants.EXAM_FAIL_ON_UNRESOLVED_KEY;
-import static org.ops4j.pax.exam.Constants.START_LEVEL_TEST_BUNDLE;
-import static org.ops4j.pax.exam.CoreOptions.systemPackage;
-import static org.ops4j.pax.exam.CoreOptions.systemProperty;
-import static org.osgi.framework.Constants.FRAMEWORK_BOOTDELEGATION;
-import static org.osgi.framework.Constants.FRAMEWORK_STORAGE;
-import static org.osgi.framework.Constants.FRAMEWORK_STORAGE_CLEAN;
-import static org.osgi.framework.Constants.FRAMEWORK_STORAGE_CLEAN_ONFIRSTINIT;
-import static org.osgi.framework.Constants.FRAMEWORK_SYSTEMPACKAGES_EXTRA;
-
-import java.io.IOException;
-import java.io.InputStream;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.SortedMap;
-import java.util.Stack;
-import java.util.TreeMap;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
-
-import org.ops4j.pax.exam.ConfigurationManager;
+import org.ops4j.pax.exam.*;
 import org.ops4j.pax.exam.Constants;
-import org.ops4j.pax.exam.ExamSystem;
-import org.ops4j.pax.exam.Info;
-import org.ops4j.pax.exam.Option;
-import org.ops4j.pax.exam.ProbeInvoker;
-import org.ops4j.pax.exam.TestAddress;
-import org.ops4j.pax.exam.TestContainer;
-import org.ops4j.pax.exam.TestContainerException;
-import org.ops4j.pax.exam.options.BootDelegationOption;
-import org.ops4j.pax.exam.options.FrameworkPropertyOption;
-import org.ops4j.pax.exam.options.FrameworkStartLevelOption;
-import org.ops4j.pax.exam.options.ProvisionOption;
-import org.ops4j.pax.exam.options.SystemPackageOption;
-import org.ops4j.pax.exam.options.SystemPropertyOption;
-import org.ops4j.pax.exam.options.ValueOption;
+import org.ops4j.pax.exam.options.*;
 import org.ops4j.pax.exam.options.extra.CleanCachesOption;
 import org.ops4j.pax.exam.options.extra.RepositoryOption;
 import org.ops4j.pax.swissbox.tracker.ServiceLookup;
-import org.osgi.framework.Bundle;
-import org.osgi.framework.BundleContext;
-import org.osgi.framework.BundleException;
-import org.osgi.framework.FrameworkEvent;
-import org.osgi.framework.FrameworkListener;
+import org.osgi.framework.*;
 import org.osgi.framework.launch.Framework;
 import org.osgi.framework.launch.FrameworkFactory;
 import org.osgi.service.startlevel.StartLevel;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.IOException;
+import java.io.InputStream;
+import java.util.*;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+
+import static org.ops4j.pax.exam.Constants.EXAM_FAIL_ON_UNRESOLVED_KEY;
+import static org.ops4j.pax.exam.Constants.START_LEVEL_TEST_BUNDLE;
+import static org.ops4j.pax.exam.CoreOptions.systemPackage;
+import static org.ops4j.pax.exam.CoreOptions.systemProperty;
+import static org.osgi.framework.Constants.*;
+
 /**
  * The Native Test Container starts an OSGi framework using {@link FrameworkFactory} and provisions
  * the bundles configured in the Exam system.
- * <p>
+ * <p/>
  * When the framework has reached the configured start level, the container checks that all bundles
  * are resolved and throws an exception otherwise.
- * 
+ *
  * @author Toni Menzel
  * @author Harald Wellmann
  * @since Jan 7, 2010
@@ -85,14 +58,12 @@ public class NativeTestContainer implements TestContainer {
     private static final Logger LOG = LoggerFactory.getLogger(NativeTestContainer.class);
     private static final String PROBE_SIGNATURE_KEY = "Probe-Signature";
     private final Stack<Long> installed = new Stack<Long>();
-
     private final FrameworkFactory frameworkFactory;
     private ExamSystem system;
-
     private volatile Framework framework;
 
     public NativeTestContainer(ExamSystem system, FrameworkFactory frameworkFactory)
-        throws IOException {
+            throws IOException {
         this.frameworkFactory = frameworkFactory;
         this.system = system;
     }
@@ -102,7 +73,7 @@ public class NativeTestContainer implements TestContainer {
         Map<String, String> props = new HashMap<String, String>();
         props.put(PROBE_SIGNATURE_KEY, address.root().identifier());
         ProbeInvoker service = ServiceLookup.getService(framework.getBundleContext(),
-            ProbeInvoker.class, props);
+                ProbeInvoker.class, props);
         service.call(address.arguments());
     }
 
@@ -112,12 +83,11 @@ public class NativeTestContainer implements TestContainer {
             Bundle b = framework.getBundleContext().installBundle(location, stream);
             installed.push(b.getBundleId());
             LOG.debug("Installed bundle " + b.getSymbolicName() + " as Bundle ID "
-                + b.getBundleId());
+                    + b.getBundleId());
             setBundleStartLevel(b.getBundleId(), Constants.START_LEVEL_TEST_BUNDLE);
             b.start();
             return b.getBundleId();
-        }
-        catch (BundleException e) {
+        } catch (BundleException e) {
             e.printStackTrace();
         }
         return -1;
@@ -135,8 +105,7 @@ public class NativeTestContainer implements TestContainer {
                 Bundle bundle = framework.getBundleContext().getBundle(id);
                 bundle.uninstall();
                 LOG.debug("Uninstalled bundle " + id);
-            }
-            catch (BundleException e) {
+            } catch (BundleException e) {
                 // Sometimes bundles go mad when install + uninstall happens too
                 // fast.
             }
@@ -150,15 +119,16 @@ public class NativeTestContainer implements TestContainer {
 
     @Override
     public TestContainer start() {
+        LOG.info("Starting test container ... modified version");
         try {
-            system = system.fork(new Option[] {
-                systemPackage("org.ops4j.pax.exam;version="
-                    + skipSnapshotFlag(Info.getPaxExamVersion())),
-                systemPackage("org.ops4j.pax.exam.options;version="
-                    + skipSnapshotFlag(Info.getPaxExamVersion())),
-                systemPackage("org.ops4j.pax.exam.util;version="
-                    + skipSnapshotFlag(Info.getPaxExamVersion())),
-                systemProperty("java.protocol.handler.pkgs").value("org.ops4j.pax.url") });
+            system = system.fork(new Option[]{
+                    systemPackage("org.ops4j.pax.exam;version="
+                            + skipSnapshotFlag(Info.getPaxExamVersion())),
+                    systemPackage("org.ops4j.pax.exam.options;version="
+                            + skipSnapshotFlag(Info.getPaxExamVersion())),
+                    systemPackage("org.ops4j.pax.exam.util;version="
+                            + skipSnapshotFlag(Info.getPaxExamVersion())),
+                    systemProperty("java.protocol.handler.pkgs").value("org.ops4j.pax.url")});
             Map<String, Object> p = createFrameworkProperties();
             if (LOG.isDebugEnabled()) {
                 logFrameworkProperties(p);
@@ -167,11 +137,9 @@ public class NativeTestContainer implements TestContainer {
             framework = frameworkFactory.newFramework(p);
             framework.init();
             installAndStartBundles(framework.getBundleContext());
-        }
-        catch (BundleException e) {
+        } catch (BundleException e) {
             throw new TestContainerException("Problem starting test container.", e);
-        }
-        catch (IOException e) {
+        } catch (IOException e) {
             throw new TestContainerException("Problem starting test container.", e);
         }
         return this;
@@ -200,15 +168,12 @@ public class NativeTestContainer implements TestContainer {
                 stopOrAbort();
                 framework = null;
                 system.clear();
-            }
-            catch (BundleException e) {
+            } catch (BundleException e) {
                 LOG.warn("Problem during stopping fw.", e);
-            }
-            catch (InterruptedException e) {
+            } catch (InterruptedException e) {
                 LOG.warn("InterruptedException during stopping fw.", e);
             }
-        }
-        else {
+        } else {
             LOG.warn("Framework does not exist. Called start() before ? ");
         }
         return this;
@@ -226,7 +191,7 @@ public class NativeTestContainer implements TestContainer {
 
         if (framework.getState() != Framework.RESOLVED) {
             String message = "Framework has not yet stopped after " + timeout
-                + " ms. waitForStop did not return";
+                    + " ms. waitForStop did not return";
             throw new TestContainerException(message);
         }
     }
@@ -240,7 +205,7 @@ public class NativeTestContainer implements TestContainer {
 
         p.put(FRAMEWORK_STORAGE, system.getTempFolder().getAbsolutePath());
         p.put(FRAMEWORK_SYSTEMPACKAGES_EXTRA,
-            buildString(system.getOptions(SystemPackageOption.class)));
+                buildString(system.getOptions(SystemPackageOption.class)));
         p.put(FRAMEWORK_BOOTDELEGATION, buildString(system.getOptions(BootDelegationOption.class)));
 
         for (FrameworkPropertyOption option : system.getOptions(FrameworkPropertyOption.class)) {
@@ -288,8 +253,7 @@ public class NativeTestContainer implements TestContainer {
         }
         if (builder.length() > 0) {
             return builder.substring(0, builder.length() - 1);
-        }
-        else {
+        } else {
             return "";
         }
     }
@@ -305,8 +269,7 @@ public class NativeTestContainer implements TestContainer {
             if (bundle.shouldStart()) {
                 b.start();
                 LOG.debug("+ Install (start@{}) {}", startLevel, bundle);
-            }
-            else {
+            } else {
                 LOG.debug("+ Install (no start) {}", bundle);
             }
         }
@@ -316,12 +279,19 @@ public class NativeTestContainer implements TestContainer {
         verifyThatBundlesAreResolved(bundles);
     }
 
-    private void setFrameworkStartLevel(BundleContext context, final StartLevel sl) {
+    private void setFrameworkStartLevel(final BundleContext context, final StartLevel sl) {
         FrameworkStartLevelOption startLevelOption = system
-            .getSingleOption(FrameworkStartLevelOption.class);
+                .getSingleOption(FrameworkStartLevelOption.class);
         final int startLevel = startLevelOption == null ? START_LEVEL_TEST_BUNDLE
-            : startLevelOption.getStartLevel();
-        LOG.debug("Jump to startlevel: " + startLevel);
+                : startLevelOption.getStartLevel();
+        LOG.info("Jump to startlevel: " + startLevel + " current : " + sl.getStartLevel());
+
+        if (sl.getStartLevel() == startLevel) {
+            String msg = String.format("start level %d has been reached", startLevel);
+            LOG.info(msg);
+            return;
+        }
+
         final CountDownLatch latch = new CountDownLatch(1);
         context.addFrameworkListener(new FrameworkListener() {
 
@@ -338,13 +308,50 @@ public class NativeTestContainer implements TestContainer {
 
         try {
             long timeout = system.getTimeout().getValue();
-            if (!latch.await(timeout, TimeUnit.MILLISECONDS)) {
-                String msg = String.format("start level %d has not been reached within %d ms",
-                    startLevel, timeout);
+            //if (!latch.await(timeout, TimeUnit.MILLISECONDS)) {
+            if (!latch.await(20, TimeUnit.SECONDS)) {
+                if (sl.getStartLevel() == startLevel) {
+                    String msg = String.format("start level %d has been reached", startLevel);
+                    LOG.info(msg);
+                    return;
+                }
+
+                // Detect FELIX-3953
+                // The strategy is quite simple
+                // We know that a thread is going to blocked in Classloader.checkCerts
+                // we introspect the first element of all Thread's stacks to detect this method
+                // if it's found we throw an IllegalThreadStateException.
+                Map<Thread, StackTraceElement[]> threads = Thread.getAllStackTraces();
+                for (Thread thread : threads.keySet()) {
+                    StackTraceElement[] elements = threads.get(thread);
+                    if (elements.length > 0
+                            && elements[0].getClassName().equals(ClassLoader.class.getName())
+                            && elements[0].getMethodName().equals("checkCerts")) {
+                        // We hit the bug....
+                        LOG.info("We hit the checkCerts bug (FELIX-3953) - restarting framework");
+                        throw new IllegalThreadStateException("Hitting FELIX-3953");
+                    }
+                }
+//                // Thread dump
+//                System.out.println("=================================================");
+//                Map<Thread, StackTraceElement[]> threads = Thread.getAllStackTraces();
+//                for (Thread thread : threads.keySet()) {
+//                    System.out.println("Thread " + thread.getName());
+//                    System.out.println("----------------------------- ");
+//                    for (StackTraceElement elem : threads.get(thread)) {
+//                        System.out.println("\t " + elem.getClassName() + "." + elem.getMethodName() + " - " + elem
+//                                .getFileName() + ":" + elem.getLineNumber());
+//                    }
+//                    System.out.println("(- - - - - - - - - - - - - - - )");
+//                }
+//                System.out.println("=================================================");
+
+
+                String msg = String.format("start level %d has not been reached within %d ms (current start level : " +
+                        "%d)", startLevel, timeout, sl.getStartLevel());
                 throw new TestContainerException(msg);
             }
-        }
-        catch (InterruptedException e) {
+        } catch (InterruptedException e) {
             throw new TestContainerException(e);
         }
     }
@@ -359,10 +366,10 @@ public class NativeTestContainer implements TestContainer {
         }
         ConfigurationManager cm = new ConfigurationManager();
         boolean failOnUnresolved = Boolean.parseBoolean(cm.getProperty(EXAM_FAIL_ON_UNRESOLVED_KEY,
-            "false"));
+                "false"));
         if (hasUnresolvedBundles && failOnUnresolved) {
             throw new TestContainerException(
-                "There are unresolved bundles. See previous ERROR log messages for details.");
+                    "There are unresolved bundles. See previous ERROR log messages for details.");
         }
     }
 
@@ -378,8 +385,7 @@ public class NativeTestContainer implements TestContainer {
         int idx = version.indexOf("-");
         if (idx >= 0) {
             return version.substring(0, idx);
-        }
-        else {
+        } else {
             return version;
         }
     }
@@ -393,7 +399,7 @@ public class NativeTestContainer implements TestContainer {
      * Worker thread for shutting down the framework. We'd expect Framework.waitForStop(timeout) to
      * return after the given timeout, but this is not the case with Equinox (tested on 3.6.2 and
      * 3.7.0), so we use this worker thread to avoid blocking the main thread.
-     * 
+     *
      * @author Harald Wellmann
      */
     private class Stopper extends Thread {
@@ -410,10 +416,9 @@ public class NativeTestContainer implements TestContainer {
                 FrameworkEvent frameworkEvent = framework.waitForStop(timeout);
                 if (frameworkEvent.getType() != FrameworkEvent.STOPPED) {
                     LOG.error("Framework has not yet stopped after {} ms. "
-                        + "waitForStop returned: {}", timeout, frameworkEvent);
+                            + "waitForStop returned: {}", timeout, frameworkEvent);
                 }
-            }
-            catch (InterruptedException exc) {
+            } catch (InterruptedException exc) {
                 LOG.error("Stopper thread was interrupted");
             }
         }

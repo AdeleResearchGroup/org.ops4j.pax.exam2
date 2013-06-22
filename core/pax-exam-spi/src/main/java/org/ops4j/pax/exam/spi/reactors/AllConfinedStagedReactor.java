@@ -25,6 +25,8 @@ import org.ops4j.pax.exam.TestContainer;
 import org.ops4j.pax.exam.TestProbeBuilder;
 import org.ops4j.pax.exam.spi.StagedExamReactor;
 import org.ops4j.pax.exam.spi.intern.DefaultTestAddress;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * This will use new containers for any regression (hence confined)
@@ -33,6 +35,8 @@ public class AllConfinedStagedReactor implements StagedExamReactor {
 
     private final List<TestProbeBuilder> probes;
     private final Map<TestAddress, TestContainer> map;
+
+    private static final Logger LOG = LoggerFactory.getLogger(AllConfinedStagedReactor.class);
 
     /**
      * @param containers
@@ -76,7 +80,24 @@ public class AllConfinedStagedReactor implements StagedExamReactor {
             throw new IllegalArgumentException("TestAddress " + address
                 + " not from this reactor? Got it from getTargets() really?");
         }
-        container.start();
+
+        LOG.info("Starting container");
+        int maxTry = 3;
+        boolean started = false;
+        // We enter a retry-loop if we're hitting FELIX-3953
+        for (int tries = 0; ! started  && tries < maxTry; tries++) {
+            try {
+                long begin = System.currentTimeMillis();
+                container.start();
+                long end = System.currentTimeMillis();
+                LOG.info("Container started correctly in " + (end - begin) + " ms");
+                started = true;
+            } catch (IllegalThreadStateException e) {
+                // Hitting the bug :-(
+                LOG.error("Hitting FELIX-3953 ... restarting");
+            }
+        }
+
         try {
             for (TestProbeBuilder builder : probes) {
                 container.install(builder.build().getStream());
